@@ -1,36 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TouchableOpacity, ScrollView, 
-  Modal, ActivityIndicator, Linking, Alert, Image,
-  TextInput 
-} from 'react-native';
-import { styles } from './styles';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+  ActivityIndicator,
+  Linking,
+  Alert,
+  Image,
+  TextInput,
+} from "react-native";
+import { styles } from "./styles";
 
-const API_URL = 'https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth'; 
-const SUPABASE_PROJECT_URL = 'https://dqxlyhdmfrmucelgweko.supabase.co'; 
-const BUCKET_NAME = 'uploads'; 
+const API_URL =
+  "https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth";
+const SUPABASE_PROJECT_URL = "https://dqxlyhdmfrmucelgweko.supabase.co";
+const BUCKET_NAME = "uploads";
 
 export default function UserView({ categoria }) {
   const [loading, setLoading] = useState(true);
-  const [abaAtiva, setAbaAtiva] = useState('pendentes');
-  const [dados, setDados] = useState({ pendentes: [], aprovados: [], recusados: [] });
+  const [abaAtiva, setAbaAtiva] = useState("pendentes");
+  const [dados, setDados] = useState({
+    pendentes: [],
+    aprovados: [],
+    recusados: [],
+  });
   const [usuarioSelecionado, setUsuarioSelecionado] = useState(null);
-  const [motivoRejeicao, setMotivoRejeicao] = useState('');
+  const [motivoRejeicao, setMotivoRejeicao] = useState("");
+
+  // Estados para o Modal de Sucesso
+  const [mostrarSucesso, setMostrarSucesso] = useState(false);
+  const [mensagemSucesso, setMensagemSucesso] = useState({
+    titulo: "",
+    desc: "",
+  });
 
   const carregarDados = async () => {
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/drivers/category/${categoria}`, {
-        headers: { 'ngrok-skip-browser-warning': 'true', 'Accept': 'application/json' },
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+          Accept: "application/json",
+        },
       });
       const lista = await response.json();
-      
+
       if (response.ok) {
         setDados({
-          // O backend agora salva como 'ANALYSIS' após o motorista enviar
-          pendentes: lista.filter(u => u.status === 'ANALYSIS' || u.status === 'PENDING'),
-          aprovados: lista.filter(u => u.status === 'APPROVED'),
-          recusados: lista.filter(u => u.status === 'REJECTED'),
+          pendentes: lista.filter(
+            (u) => u.status === "ANALYSIS" || u.status === "PENDING",
+          ),
+          aprovados: lista.filter((u) => u.status === "APPROVED"),
+          recusados: lista.filter((u) => u.status === "REJECTED"),
         });
       }
     } catch (error) {
@@ -40,73 +63,133 @@ export default function UserView({ categoria }) {
     }
   };
 
-  useEffect(() => { carregarDados(); }, [categoria]);
+  useEffect(() => {
+    carregarDados();
+  }, [categoria]);
 
-  // Função para identificar quais documentos exibir no modal baseada na categoria do motorista
-  const obterCamposDocumentos = (driver) => {
-    const base = ['cnh_url', 'selfie_url'];
-    if (driver?.tipo_servico === 'Moto') {
-      return [...base, 'crlv_url', 'curso_url', 'cmc_url'];
-    }
-    return [...base, 'alvara_url'];
+  // Função para fechar o modal e SÓ ENTÃO atualizar a lista
+  const finalizarEAtualizar = () => {
+    setMostrarSucesso(false);
+    carregarDados();
   };
 
   const gerenciarStatus = async (id, novoStatus, valorAtivo, motivo = "") => {
+    if (novoStatus === "REJECTED" && !motivo.trim()) {
+      setUsuarioSelecionado(null);
+      setTimeout(() => {
+        setMostrarSucesso(true);
+      }, 300);
+      setMensagemSucesso({
+        titulo: "Erro",
+        desc: "Por favor, informe o motivo da recusa.",
+      });
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/drivers/update-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: novoStatus, ativo: valorAtivo })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: novoStatus, ativo: valorAtivo }),
       });
 
       if (res.ok) {
-        if (novoStatus === 'REJECTED') {
+        // Preparar mensagem do Modal
+        if (novoStatus === "REJECTED") {
+          setMensagemSucesso({
+            titulo: "Motorista Recusado!",
+            desc: "O motorista foi notificado sobre os problemas nos documentos.",
+          });
+
+          // Envia a notificação de recusa
           await fetch(`${API_URL}/notifications`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              driver_id: id, 
-              title: "Documentos Recusados", 
-              message: motivo || "Sua análise foi recusada. Verifique os dados e reenvie.", 
-              type: "AVISO" 
-            })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              driver_id: id,
+              title: "Documentos Recusados",
+              message: motivo,
+              type: "AVISO",
+            }),
+          });
+        } else if (novoStatus === "APPROVED") {
+          setMensagemSucesso({
+            titulo: "Motorista Aprovado!",
+            desc: "O cadastro foi ativado e o motorista já pode acessar o sistema.",
+          });
+        } else {
+          setMensagemSucesso({
+            titulo: "Status Alterado",
+            desc: "O motorista voltou para a fila de análise.",
           });
         }
-        
-        Alert.alert("Sucesso", "Status atualizado!");
+
+        // Fecha o modal de análise e limpa campos
         setUsuarioSelecionado(null);
-        setMotivoRejeicao('');
-        carregarDados();
+        setMotivoRejeicao("");
+
+        // Abre o modal de sucesso com um pequeno delay para não conflitar com o fechamento do anterior
+        setTimeout(() => {
+          setMostrarSucesso(true);
+        }, 300);
+      } else {
+        Alert.alert("Erro", "Falha ao atualizar status no servidor.");
       }
-    } catch (e) { 
-      Alert.alert("Erro", "Falha na comunicação."); 
+    } catch (e) {
+      Alert.alert("Erro", "Falha na conexão com o servidor.");
     }
+  };
+
+  const obterCamposDocumentos = (driver) => {
+    if (!driver) return [];
+    const todosOsCampos = [
+      "cnh_url",
+      "selfie_url",
+      "alvara_url",
+      "crlv_url",
+      "curso_url",
+      "cmc_url",
+    ];
+    return todosOsCampos.filter((campo) => driver?.[campo]);
   };
 
   const obterUrlDoc = (path) => {
     if (!path) return null;
-    // Se o path já for uma URL completa (publicUrl), retorna ela. 
-    // Caso contrário, monta com a URL do projeto.
-    return path.startsWith('http') 
-      ? path 
+    return path.startsWith("http")
+      ? path
       : `${SUPABASE_PROJECT_URL}/storage/v1/object/public/${BUCKET_NAME}/${path}`;
   };
 
-  if (loading) return <ActivityIndicator size="large" color="#007A33" style={{marginTop: 50}} />;
+  if (loading && !mostrarSucesso)
+    return (
+      <ActivityIndicator
+        size="large"
+        color="#007A33"
+        style={{ marginTop: 50 }}
+      />
+    );
 
   return (
     <View style={{ flex: 1 }}>
       <Text style={styles.welcomeText}>Gestão: {categoria}</Text>
-      
-      {/* Abas */}
+
+      {/* Abas de Filtro */}
       <View style={styles.row}>
-        {['pendentes', 'aprovados', 'recusados'].map(tipo => (
-          <TouchableOpacity 
+        {["pendentes", "aprovados", "recusados"].map((tipo) => (
+          <TouchableOpacity
             key={tipo}
-            style={[styles.card, { 
-                borderLeftColor: tipo === 'pendentes' ? '#F9B233' : tipo === 'aprovados' ? '#007A33' : '#D32F2F',
-                backgroundColor: abaAtiva === tipo ? '#F0F0F0' : '#FFF' 
-            }]} 
+            style={[
+              styles.card,
+              {
+                borderLeftColor:
+                  tipo === "pendentes"
+                    ? "#F9B233"
+                    : tipo === "aprovados"
+                      ? "#007A33"
+                      : "#D32F2F",
+                backgroundColor: abaAtiva === tipo ? "#F0F0F0" : "#FFF",
+              },
+            ]}
             onPress={() => setAbaAtiva(tipo)}
           >
             <Text style={styles.cardLabel}>{tipo.toUpperCase()}</Text>
@@ -115,89 +198,203 @@ export default function UserView({ categoria }) {
         ))}
       </View>
 
-      {/* Tabela */}
+      {/* Lista */}
       <ScrollView style={styles.mainActionCard}>
-        {dados[abaAtiva]?.map(u => (
-          <TouchableOpacity key={u.id} style={styles.tableRow} onPress={() => setUsuarioSelecionado(u)}>
-            <Text style={{flex: 2}}>{u.name}</Text>
-            <Text style={{flex: 1, textAlign: 'right', color: '#007A33'}}>Analisar</Text>
+        {dados[abaAtiva]?.map((u) => (
+          <TouchableOpacity
+            key={u.id}
+            style={styles.tableRow}
+            onPress={() => setUsuarioSelecionado(u)}
+          >
+            <Text style={{ flex: 2 }}>{u.name}</Text>
+            <Text style={{ flex: 1, textAlign: "right", color: "#007A33" }}>
+              Analisar
+            </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Modal */}
+      {/* Modal de Análise */}
       <Modal visible={!!usuarioSelecionado} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { width: '95%', maxHeight: '90%' }]}>
+          <View
+            style={[styles.modalContent, { width: "95%", maxHeight: "90%" }]}
+          >
             <Text style={styles.modalTitle}>Análise de Documentos</Text>
-            
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{marginBottom: 15}}>
-                <Text style={{fontWeight: 'bold'}}>Nome: <Text style={{fontWeight: 'normal'}}>{usuarioSelecionado?.name}</Text></Text>
-                <Text style={{fontWeight: 'bold'}}>Categoria: <Text style={{fontWeight: 'normal'}}>{usuarioSelecionado?.tipo_servico}</Text></Text>
-              </View>
+              <Text style={{ fontWeight: "bold" }}>
+                Nome:{" "}
+                <Text style={{ fontWeight: "normal" }}>
+                  {usuarioSelecionado?.name}
+                </Text>
+              </Text>
 
-              <View style={{gap: 15}}>
+              <View style={{ gap: 15, marginTop: 15 }}>
                 {obterCamposDocumentos(usuarioSelecionado).map((campo) => (
-                  <View key={campo} style={{borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10}}>
-                    <Text style={{fontWeight: 'bold', marginBottom: 5, color: '#555'}}>{campo.split('_')[0].toUpperCase()}:</Text>
-                    {usuarioSelecionado?.[campo] ? (
-                      <TouchableOpacity onPress={() => Linking.openURL(obterUrlDoc(usuarioSelecionado[campo]))}>
-                        <Image 
-                          source={{ uri: obterUrlDoc(usuarioSelecionado[campo]) }} 
-                          style={{ width: '100%', height: 220, borderRadius: 8, backgroundColor: '#f9f9f9' }}
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={{color: '#999', fontStyle: 'italic'}}>Não enviado</Text>
-                    )}
+                  <View
+                    key={campo}
+                    style={{
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#eee",
+                      paddingBottom: 10,
+                    }}
+                  >
+                    <Text style={{ fontWeight: "bold", marginBottom: 5 }}>
+                      {campo.split("_")[0].toUpperCase()}:
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Linking.openURL(obterUrlDoc(usuarioSelecionado[campo]))
+                      }
+                    >
+                      <Image
+                        source={{ uri: obterUrlDoc(usuarioSelecionado[campo]) }}
+                        style={{ width: "100%", height: 220, borderRadius: 8 }}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
                   </View>
                 ))}
               </View>
 
-              {abaAtiva === 'pendentes' && (
+              {abaAtiva === "pendentes" && (
                 <View style={{ marginTop: 20 }}>
-                  <Text style={{ fontWeight: 'bold', color: '#D32F2F' }}>Motivo se for recusar:</Text>
+                  <Text style={{ fontWeight: "bold", color: "#D32F2F" }}>
+                    Motivo da Recusa:
+                  </Text>
                   <TextInput
-                    style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 8, marginTop: 5 }}
-                    placeholder="Ex: CNH vencida..."
+                    style={{
+                      backgroundColor: "#fff",
+                      borderWidth: 1,
+                      borderColor: "#D32F2F",
+                      borderRadius: 5,
+                      padding: 10,
+                      marginTop: 5,
+                      textAlignVertical: "top",
+                    }}
+                    placeholder="Descreva o problema..."
                     value={motivoRejeicao}
                     onChangeText={setMotivoRejeicao}
+                    multiline
+                    numberOfLines={3}
                   />
                 </View>
               )}
 
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 25 }}>
-                {abaAtiva === 'pendentes' ? (
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 25 }}>
+                {abaAtiva === "pendentes" ? (
                   <>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, {backgroundColor: '#D32F2F', flex: 1}]}
-                      onPress={() => gerenciarStatus(usuarioSelecionado.id, 'REJECTED', false, motivoRejeicao)}
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        { backgroundColor: "#D32F2F", flex: 1 },
+                      ]}
+                      onPress={() =>
+                        gerenciarStatus(
+                          usuarioSelecionado.id,
+                          "REJECTED",
+                          false,
+                          motivoRejeicao,
+                        )
+                      }
                     >
                       <Text style={styles.btnText}>RECUSAR</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, {backgroundColor: '#007A33', flex: 1}]}
-                      onPress={() => gerenciarStatus(usuarioSelecionado.id, 'APPROVED', true)}
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        { backgroundColor: "#007A33", flex: 1 },
+                      ]}
+                      onPress={() =>
+                        gerenciarStatus(usuarioSelecionado.id, "APPROVED", true)
+                      }
                     >
                       <Text style={styles.btnText}>APROVAR</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
-                  <TouchableOpacity 
-                    style={[styles.actionBtn, {backgroundColor: '#F9B233', width: '100%'}]}
-                    onPress={() => gerenciarStatus(usuarioSelecionado.id, 'PENDING', null)}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      { backgroundColor: "#F9B233", width: "100%" },
+                    ]}
+                    onPress={() =>
+                      gerenciarStatus(usuarioSelecionado.id, "PENDING", null)
+                    }
                   >
-                    <Text style={styles.btnText}>REVERTAR PARA PENDENTE</Text>
+                    <Text style={styles.btnText}>REVERTER PARA PENDENTE</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
-              <TouchableOpacity style={{padding: 20}} onPress={() => setUsuarioSelecionado(null)}>
-                <Text style={{textAlign: 'center', color: '#666'}}>FECHAR</Text>
+              <TouchableOpacity
+                style={{ padding: 20 }}
+                onPress={() => setUsuarioSelecionado(null)}
+              >
+                <Text style={{ textAlign: "center", color: "#666" }}>
+                  FECHAR
+                </Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Sucesso */}
+      <Modal visible={mostrarSucesso} transparent={true} animationType="fade">
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              width: 300,
+              backgroundColor: "#fff",
+              borderRadius: 20,
+              padding: 25,
+              alignItems: "center",
+              elevation: 10,
+            }}
+          >
+            <Text style={{ fontSize: 50, marginBottom: 15 }}>✅</Text>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: "#333",
+                textAlign: "center",
+              }}
+            >
+              {mensagemSucesso.titulo}
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: "#666",
+                textAlign: "center",
+                marginTop: 10,
+                marginBottom: 20,
+              }}
+            >
+              {mensagemSucesso.desc}
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#007A33",
+                paddingVertical: 12,
+                paddingHorizontal: 30,
+                borderRadius: 10,
+              }}
+              onPress={finalizarEAtualizar}
+            >
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                ENTENDIDO
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -1,53 +1,80 @@
-import React, { useState, useEffect } from 'react'; // Adicionado useEffect aqui
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
-import { styles } from './styles';
-import logoPrefeitura from '../../assets/logo_tere.png';
-import iconeMob from '../../assets/icone_mob.png';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { styles } from "./styles";
+
+import logoPrefeitura from "../../assets/logo_tere.png";
+import iconeMob from "../../assets/icone_mob.png";
+
+const API_URL =
+  "https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth";
 
 export default function Login({ onLoginSuccess }) {
-  const [usuario, setUsuario] = useState('');
-  const [senha, setSenha] = useState('');
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState('');
+  const [erro, setErro] = useState("");
 
-  const realizarLogin = () => {
-    setErro('');
-    
-    if (usuario === 'admin' && senha === '123') {
-      setCarregando(true);
-      setTimeout(() => {
-        setCarregando(false);
-        onLoginSuccess(); 
-      }, 1000);
-    } else {
-      setErro('Usuário ou senha incorretos.');
-      // LIMPA OS CAMPOS EM CASO DE ERRO
-      setUsuario('');
-      setSenha('');
+  // 🔐 checa sessão
+  useEffect(() => {
+    const check = async () => {
+      const token = await AsyncStorage.getItem("admin_token");
+      if (token) onLoginSuccess();
+    };
+    check();
+  }, []);
+
+  const realizarLogin = async () => {
+    setErro("");
+
+    if (!usuario || !senha) {
+      setErro("Preencha usuário e senha.");
+      return;
+    }
+
+    setCarregando(true);
+
+    try {
+      const res = await fetch(`${API_URL}/admin/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          email: usuario.trim(),
+          password: senha.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Erro ao logar");
+      }
+
+      await AsyncStorage.setItem("admin_token", data.token);
+      await AsyncStorage.setItem("admin_user", JSON.stringify(data.user));
+
+      onLoginSuccess();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
     }
   };
-
-  // LÓGICA DO ENTER
-  useEffect(() => {
-    const escutarTeclado = (event) => {
-      if (event.key === 'Enter') {
-        realizarLogin();
-      }
-    };
-    window.addEventListener('keydown', escutarTeclado);
-    // Limpeza ao sair da tela
-    return () => window.removeEventListener('keydown', escutarTeclado);
-  }, [usuario, senha]); 
 
   return (
     <View style={styles.container}>
       <View style={styles.loginCard}>
-        
-          <Image 
-            source={iconeMob} 
-            style={styles.logoPlaceholder} 
-            resizeMode="contain" 
-          />
+        <Image source={iconeMob} style={styles.logoPlaceholder} />
 
         <View style={styles.header}>
           <Text style={styles.title}>Mobilidade</Text>
@@ -56,7 +83,7 @@ export default function Login({ onLoginSuccess }) {
 
         <View style={styles.form}>
           <Text style={styles.label}>Usuário / E-mail</Text>
-          <TextInput 
+          <TextInput
             style={styles.input}
             value={usuario}
             onChangeText={setUsuario}
@@ -64,26 +91,22 @@ export default function Login({ onLoginSuccess }) {
           />
 
           <Text style={[styles.label, { marginTop: 15 }]}>Senha</Text>
-          <TextInput 
+          <TextInput
             style={styles.input}
             secureTextEntry
             value={senha}
             onChangeText={setSenha}
           />
-          
-          <TouchableOpacity style={styles.forgotPassContainer} onPress={() => alert('PENDENTE')}>
-            <Text style={styles.forgotText}>Esqueci minha senha</Text>
-          </TouchableOpacity>          
 
-          {erro ? <Text style={styles.errorText}>{erro}</Text> : null}
+          {erro ? <Text style={{ color: "red" }}>{erro}</Text> : null}
 
-          <TouchableOpacity 
-            style={styles.button} 
+          <TouchableOpacity
+            style={styles.button}
             onPress={realizarLogin}
             disabled={carregando}
           >
             {carregando ? (
-              <ActivityIndicator color="#FFF" />
+              <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>ENTRAR</Text>
             )}
@@ -91,12 +114,7 @@ export default function Login({ onLoginSuccess }) {
         </View>
 
         <View style={styles.footer}>
-          <Image 
-            source={logoPrefeitura} 
-            style={styles.logoFooterImage} 
-            resizeMode="contain" 
-          />
-          <Text style={styles.footerText}>Secretaria Municipal de Ciência e Tecnologia</Text>
+          <Image source={logoPrefeitura} style={styles.logoFooterImage} />
         </View>
       </View>
     </View>

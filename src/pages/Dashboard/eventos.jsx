@@ -1,56 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, 
-  ActivityIndicator, Alert, ScrollView, FlatList 
-} from 'react-native';
-import { styles } from './styles';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Modal,
+  StyleSheet,
+} from "react-native";
 
-const API_URL = 'https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth';
+const API_URL =
+  "https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth";
 
 export default function Eventos() {
-  const [titulo, setTitulo] = useState('');
-  const [mensagem, setMensagem] = useState('');
+  // Estados do Formulário
+  const [titulo, setTitulo] = useState("");
+  const [mensagem, setMensagem] = useState("");
+  const [editandoId, setEditandoId] = useState(null);
   const [enviando, setEnviando] = useState(false);
-  const [eventos, setEventos] = useState([]); // Estado para a lista
+
+  // Estados da Lista
+  const [eventos, setEventos] = useState([]);
   const [carregandoLista, setCarregandoLista] = useState(true);
+
+  // Estados do Modal (Pop-up)
+  const [modalVisivel, setModalVisivel] = useState(false);
+  const [eventoSelecionado, setEventoSelecionado] = useState(null);
 
   useEffect(() => {
     buscarEventos();
   }, []);
 
-
-  // Função para buscar eventos do banco
   const buscarEventos = async () => {
-
     try {
-        
-        setCarregandoLista(true);
-        // Usamos a nova rota 'all' para trazer tudo do banco
-        const res = await fetch(`${API_URL}/notifications/all`, {
-        method: 'GET',
-        headers: { 
-            'Accept': 'application/json',
-            'ngrok-skip-browser-warning': 'true' // CRUCIAL para ngrok não bloquear a lista
+      setCarregandoLista(true);
+      const res = await fetch(`${API_URL}/notifications/all`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
         },
-        });
+      });
+      const data = await res.json();
+      const listaBruta = Array.isArray(data) ? data : data.data || [];
 
-        if (!res.ok) throw new Error("Erro ao buscar dados");
-
-        const data = await res.json();
-        
-        // Filtramos para mostrar apenas o que é Evento Geral (driver_id nulo)
-        const apenasEventosGerais = data.filter(item => item.driver_id === null);
-        
-        setEventos(apenasEventosGerais);
+      // Filtra apenas eventos gerais (driver_id nulo)
+      const apenasEventosGerais = listaBruta.filter(
+        (item) => item.driver_id === null || item.driver_id === undefined,
+      );
+      setEventos(apenasEventosGerais);
     } catch (e) {
-        console.error("Erro na busca:", e);
-        // Opcional: mostrar um alerta se falhar muito
+      console.error("Erro ao buscar:", e);
     } finally {
-        setCarregandoLista(false);
+      setCarregandoLista(false);
     }
-    };
+  };
 
-  const enviarEvento = async () => {
+  const salvarEvento = async () => {
     if (!titulo || !mensagem) {
       Alert.alert("Aviso", "Preencha todos os campos!");
       return;
@@ -58,88 +66,306 @@ export default function Eventos() {
 
     setEnviando(true);
     try {
-      const res = await fetch(`${API_URL}/notifications`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'ngrok-skip-browser-warning': 'true' 
+      // Define se é criação (POST) ou atualização (POST na rota /update)
+      const url = editandoId
+        ? `${API_URL}/notifications/update/${editandoId}`
+        : `${API_URL}/notifications`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
         },
-        body: JSON.stringify({ 
-          driver_id: null, // Evento geral
-          title: titulo, 
-          message: mensagem, 
-          type: 'EVENTO' 
-        })
+        body: JSON.stringify({
+          driver_id: null,
+          title: titulo,
+          message: mensagem,
+          type: "EVENTO",
+        }),
       });
 
       if (res.ok) {
-        Alert.alert("Sucesso", "📢 Evento criado e enviado para todos!");
-        setTitulo(''); 
-        setMensagem('');
-        buscarEventos(); // Atualiza a lista automaticamente após criar
+        Alert.alert(
+          "Sucesso",
+          editandoId ? "Evento atualizado!" : "Evento publicado!",
+        );
+        limparFormulario();
+        buscarEventos();
       } else {
         Alert.alert("Erro", "Falha ao salvar no banco.");
       }
-    } catch (e) { 
-      Alert.alert("Erro de Rede", "Verifique sua conexão."); 
-    } finally { 
-      setEnviando(false); 
+    } catch (e) {
+      Alert.alert("Erro de Rede", "Verifique sua conexão.");
+    } finally {
+      setEnviando(false);
     }
   };
 
+  const confirmarExclusao = async () => {
+    if (!eventoSelecionado) return;
+
+    try {
+      const res = await fetch(
+        `${API_URL}/notifications/${eventoSelecionado.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+        },
+      );
+
+      if (res.ok) {
+        setModalVisivel(false);
+        Alert.alert("Sucesso", "Evento excluído.");
+        buscarEventos();
+      } else {
+        Alert.alert("Erro", "Falha ao excluir.");
+      }
+    } catch (e) {
+      Alert.alert("Erro", "Erro de conexão.");
+    }
+  };
+
+  const prepararEdicao = () => {
+    setEditandoId(eventoSelecionado.id);
+    setTitulo(eventoSelecionado.title);
+    setMensagem(eventoSelecionado.message);
+    setModalVisivel(false);
+  };
+
+  const limparFormulario = () => {
+    setEditandoId(null);
+    setTitulo("");
+    setMensagem("");
+  };
+
+  const abrirOpcoes = (item) => {
+    setEventoSelecionado(item);
+    setModalVisivel(true);
+  };
+
   return (
-    <ScrollView style={{ flex: 1 }}>
-      {/* FORMULÁRIO DE CRIAÇÃO */}
-      <View style={styles.mainActionCard}>
-        <Text style={[styles.modalTitle, { textAlign: 'left' }]}>📢 Novo Evento Geral</Text>
-        
-        <Text style={{ marginTop: 15, fontWeight: 'bold' }}>Título</Text>
-        <TextInput 
-          style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginTop: 5, backgroundColor: '#fff' }}
-          value={titulo} 
-          onChangeText={setTitulo} 
-          placeholder="Ex: Manutenção no Sistema"
-        />
+    <View style={{ flex: 1, backgroundColor: "#f5f5f5" }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
+        {/* CARD DE ENTRADA (CRIAÇÃO/EDIÇÃO) */}
+        <View style={localStyles.card}>
+          <Text style={localStyles.cardTitle}>
+            {editandoId ? "✏️ Editando Evento" : "📢 Novo Evento Geral"}
+          </Text>
 
-        <Text style={{ marginTop: 15, fontWeight: 'bold' }}>Mensagem</Text>
-        <TextInput 
-          style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginTop: 5, height: 80, textAlignVertical: 'top', backgroundColor: '#fff' }}
-          value={mensagem} 
-          onChangeText={setMensagem} 
-          multiline 
-          placeholder="Descreva o evento..."
-        />
+          <TextInput
+            style={localStyles.input}
+            value={titulo}
+            onChangeText={setTitulo}
+            placeholder="Título do Evento"
+          />
 
-        <TouchableOpacity 
-          style={[styles.actionBtn, { backgroundColor: '#007A33', marginTop: 20, width: '100%', height: 50, justifyContent: 'center' }]} 
-          onPress={enviarEvento}
-          disabled={enviando}
-        >
-          {enviando ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>PUBLICAR AGORA</Text>}
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            style={[
+              localStyles.input,
+              { height: 100, textAlignVertical: "top" },
+            ]}
+            value={mensagem}
+            onChangeText={setMensagem}
+            multiline
+            placeholder="Descrição da mensagem..."
+          />
 
-      {/* LISTA DE EVENTOS CRIADOS */}
-      <View style={[styles.mainActionCard, { marginTop: 20, marginBottom: 50 }]}>
-        <Text style={[styles.modalTitle, { textAlign: 'left', marginBottom: 15 }]}>Histórico de Eventos</Text>
-        
-        {carregandoLista ? (
-          <ActivityIndicator color="#007A33" />
-        ) : eventos.length === 0 ? (
-          <Text style={{ textAlign: 'center', color: '#666' }}>Nenhum evento criado ainda.</Text>
-        ) : (
-          eventos.map((item) => (
-            <View key={item.id} style={{ padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-              <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#333' }}>{item.title}</Text>
-              <Text style={{ color: '#666', marginTop: 4 }}>{item.message}</Text>
-              <Text style={{ fontSize: 10, color: '#999', marginTop: 8 }}>
-                Criado em: {new Date(item.created_at).toLocaleString('pt-BR')}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
-    </ScrollView>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
+              style={[
+                localStyles.btnPrincipal,
+                {
+                  flex: 1,
+                  backgroundColor: editandoId ? "#E67E22" : "#007A33",
+                },
+              ]}
+              onPress={salvarEvento}
+              disabled={enviando}
+            >
+              {enviando ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={localStyles.btnText}>
+                  {editandoId ? "SALVAR ALTERAÇÕES" : "PUBLICAR AGORA"}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {editandoId && (
+              <TouchableOpacity
+                style={[
+                  localStyles.btnPrincipal,
+                  { backgroundColor: "#666", paddingHorizontal: 20 },
+                ]}
+                onPress={limparFormulario}
+              >
+                <Text style={localStyles.btnText}>CANCELAR</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* LISTA DE HISTÓRICO */}
+        <View style={[localStyles.card, { marginTop: 20 }]}>
+          <Text style={localStyles.cardTitle}>Histórico de Eventos</Text>
+          <Text style={{ fontSize: 12, color: "#999", marginBottom: 15 }}>
+            Toque em um evento para editar ou excluir
+          </Text>
+
+          {carregandoLista ? (
+            <ActivityIndicator color="#007A33" size="large" />
+          ) : eventos.length === 0 ? (
+            <Text style={localStyles.emptyText}>Nenhum evento registrado.</Text>
+          ) : (
+            eventos.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={localStyles.itemLista}
+                onPress={() => abrirOpcoes(item)}
+              >
+                <View>
+                  <Text style={localStyles.itemTitulo}>{item.title}</Text>
+                  <Text style={localStyles.itemMensagem}>{item.message}</Text>
+                  <Text style={localStyles.itemData}>
+                    {new Date(item.created_at).toLocaleString("pt-BR")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      </ScrollView>
+
+      {/* MODAL DE OPÇÕES */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisivel}
+        onRequestClose={() => setModalVisivel(false)}
+      >
+        <View style={localStyles.modalOverlay}>
+          <View style={localStyles.modalContent}>
+            <Text style={localStyles.modalHeader}>Opções do Evento</Text>
+
+            <TouchableOpacity
+              style={[localStyles.modalBtn, { backgroundColor: "#3498db" }]}
+              onPress={prepararEdicao}
+            >
+              <Text style={localStyles.btnText}>EDITAR CONTEÚDO</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                localStyles.modalBtn,
+                { backgroundColor: "#e74c3c", marginTop: 12 },
+              ]}
+              onPress={confirmarExclusao}
+            >
+              <Text style={localStyles.btnText}>EXCLUIR DO BANCO</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ marginTop: 20 }}
+              onPress={() => setModalVisivel(false)}
+            >
+              <Text style={{ color: "#666", fontWeight: "bold" }}>FECHAR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    margin: 15,
+    padding: 20,
+    borderRadius: 12,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 8,
+    backgroundColor: "#fafafa",
+  },
+  btnPrincipal: {
+    height: 50,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  btnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  itemLista: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  itemTitulo: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#444",
+  },
+  itemMensagem: {
+    color: "#666",
+    marginTop: 3,
+  },
+  itemData: {
+    fontSize: 10,
+    color: "#aaa",
+    marginTop: 8,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#999",
+    marginTop: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+  },
+  modalHeader: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#222",
+  },
+  modalBtn: {
+    width: "100%",
+    padding: 15,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+});

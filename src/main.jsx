@@ -1,43 +1,61 @@
-import React, { useState } from 'react';
-import ReactDOM from 'react-dom/client';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import EmailConfirmado from './pages/email_confirm/EmailConfimado'; 
-import RedefinirSenha from './pages/alterar_senha/senha';
+import React, { useState } from "react";
+import ReactDOM from "react-dom/client";
+
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import EmailConfirmado from "./pages/email_confirm/EmailConfimado";
+import RedefinirSenha from "./pages/alterar_senha/senha";
 
 function App() {
   const [logado, setLogado] = useState(false);
 
-  // Verifica se já existe um usuário logado ao abrir o site
-  React.useEffect(() => {
-    const user = localStorage.getItem('user_admin'); // ou o nome que você deu ao salvar
-    if (user) {
-      setLogado(true);
-    }
-  }, []);
+  // 1. Capturamos o caminho completo
+  const fullPath = window.location.pathname;
 
-  const path = window.location.pathname;
+  // 2. Limpeza total: remove a subpasta E o nome do arquivo
+  // Se a URL for /Painel-Mobilidade/login.html, o 'path' vira apenas '/'
+  const path =
+    fullPath.replace("/Painel-Mobilidade", "").replace("/login.html", "") ||
+    "/";
+
   const hash = window.location.hash;
   const params = new URLSearchParams(window.location.search);
 
-  if (hash.includes('type=recovery') || path === '/alterar-senha') {
+  console.log("Path processado:", path); // Adicione esse log para depurar no F12
+
+  // Verificação para Redefinir Senha
+  const isRecuperacao =
+    hash.includes("type=recovery") ||
+    path === "/alterar-senha" ||
+    params.get("alterar-senha") === "true";
+
+  if (isRecuperacao) {
     return <RedefinirSenha />;
   }
 
-  if (params.get('confirmado') === 'true' || path === '/email-confirmado') {
+  // Verificação para Confirmação de E-mail
+  const isConfirmacao =
+    params.get("confirmado") === "true" || path === "/email-confirmado";
+
+  if (isConfirmacao) {
     return <EmailConfirmado />;
   }
 
-  // PASSO IMPORTANTE: Passar setLogado para o componente Login
+  // Se nada acima for verdade, cai no fluxo padrão
   return logado ? (
-    <Dashboard setLogado={setLogado} /> 
+    <Dashboard setLogado={setLogado} />
   ) : (
     <Login onLoginSuccess={() => setLogado(true)} />
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// --- A PARTE QUE ESTAVA FALTANDO ---
+// Isso faz o React "acordar" e desenhar o App dentro da div 'root'
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}

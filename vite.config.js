@@ -1,12 +1,17 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  base: "/Painel-Mobilidade/", // Essencial para a subpasta da prefeitura
+
   plugins: [react()],
   resolve: {
     alias: {
-      // Isso aqui é o que resolve o erro do import!
-      'react-native': 'react-native-web',
+      "react-native": "react-native-web",
     },
   },
-})
+  build: {
+    outDir: "dist",
+    
+  },
+});
