@@ -42,7 +42,7 @@ export default function AlterarSenha() {
       // 3. Chamada para o SEU BACKEND (NestJS)
       // Substitua pela URL do seu servidor ou ngrok
       const API_URL =
-        "https://pilgrimatic-nita-scenographically.ngrok-free.dev/api/auth/confirm-reset-password";
+        "https://api-mobilidade.vercel.app/api/auth/confirm-reset-password";
 
       const response = await axios.post(API_URL, {
         token: token,
