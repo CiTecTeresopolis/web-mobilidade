@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { styles } from "./styles";
 
+
 const API_URL = "https://api-mobilidade.vercel.app/api/auth";
 const SUPABASE_PROJECT_URL = "https://dqxlyhdmfrmucelgweko.supabase.co";
 const BUCKET_NAME = "uploads";
@@ -37,10 +38,10 @@ export default function UserView({ categoria }) {
 
   const DOCUMENTOS_POR_CATEGORIA = {
   Motorista1: ["cnh_url", "selfie_url", "crlv_url", "cmc_url", "curso_url"], // Exemplo: Moto
-  Motorista2: ["cnh_url", "selfie_url", "crlv_url", "print_p_url", "print_s_url", "comp_url"], // Exemplo: Uber
-  Motorista3: ["cnh_url", "selfie_url", "crlv_url", "tacografo_url", "inmetro_url", "cmd_url", "ccf_url", "consta_url"], // Exemplo: Táxi
-  Motorista4: ["cnh_url", "selfie_url", "crlv_url", "tacografo_url", "inmetro_url", "cmd_url", "ccf_url"], // Exemplo: Van
-  Motorista5: ["cnh_url", "selfie_url", "crlv_url", "consta_url", "comp_url"], // Exemplo: Frete
+  Motorista2: ["cnh_url", "selfie_url", "crlv_url", "print_p_url", "print_s_url", "comp_url", "consta_url" ], // Exemplo: Uber
+  Motorista3: ["cnh_url", "selfie_url", "crlv_url", "cmd_url", "ccf_url", "consta_url"], // Exemplo: Táxi (Taximetro e cmc do taxi)
+  Motorista4: ["cnh_url", "selfie_url", "crlv_url", "tacografo_url", "inmetro_url", "cmd_url", "ccf_url"], // Exemplo: Van (Cmc)
+  Motorista5: ["cnh_url", "selfie_url", "crlv_url"], // Exemplo: Frete
 };
 
   const TITULOS_DOCUMENTOS = {
@@ -98,6 +99,8 @@ export default function UserView({ categoria }) {
   };
 
   const gerenciarStatus = async (id, novoStatus, valorAtivo, motivo = "") => {
+
+    console.log("ID do motorista sendo processado:", id);
     if (novoStatus === "REJECTED" && !motivo.trim()) {
       setUsuarioSelecionado(null);
       setTimeout(() => {
@@ -130,7 +133,7 @@ export default function UserView({ categoria }) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              driver_id: id,
+              driver_id: String(id), // Força a conversão para string pura (padrão UUID)
               title: "Documentos Recusados",
               message: motivo,
               type: "AVISO",
