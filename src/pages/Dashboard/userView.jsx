@@ -14,6 +14,7 @@ import {
 import { styles } from "./styles";
 
 
+
 const API_URL = "https://api-mobilidade.vercel.app/api/auth";
 const SUPABASE_PROJECT_URL = "https://dqxlyhdmfrmucelgweko.supabase.co";
 const BUCKET_NAME = "uploads";
